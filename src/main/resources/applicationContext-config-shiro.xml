@@ -18,6 +18,7 @@
         <property name="cacheManager" ref="ehcacheManager"/>
     </bean>
     
+    <!-- shiro 提供的用于注入自己的Cache -->
     <bean id="cacheManager" class="com.shiro.cache.SpringCacheManagerWrapper">
         <property name="cacheManager" ref="springCacheManager"/>
     </bean>
@@ -33,12 +34,14 @@
     <!-- Realm实现 -->
     <bean id="userRealm" class="com.shiro.realm.UserRealm">
         <property name="cachingEnabled" value="true"/>  <!-- 启用缓存，默认false -->
+        <!-- 注入凭证匹配器 -->
         <property name="credentialsMatcher" ref="credentialsMatcher"/>
         
         <!-- 禁用权限缓存，防止修改权限之后不能立即生效的问题 -->
-        <property name="authenticationCachingEnabled" value="false"/>  <!-- 启用身份验证缓存，即缓存AuthenticationInfo 信息，默认false -->
+        <property name="authenticationCachingEnabled" value="false"/>  <!-- 启用身份验证缓存，即缓存AuthenticationInfo 信息，默认false ,如设置未true，修改密码后需要clearCachedAuthenticationInfo清空缓存，不然会找之前的密码 -->
         <property name="authenticationCacheName" value="authenticationCache"/>  <!-- 缓存AuthenticationInfo信息的缓存名称 -->
-        <property name="authorizationCachingEnabled" value="false"/>  <!-- 启用授权缓存，即缓存AuthorizationInfo信息，默认false -->
+        
+        <property name="authorizationCachingEnabled" value="false"/>  <!-- 启用授权缓存，即缓存AuthorizationInfo信息，默认false，如设置未true则缓存这个用户的所有权限信息，当权限信息发生更改时需要清空缓存 -->
         <property name="authorizationCacheName" value="authorizationCache"/>  <!-- 缓存AuthorizationInfo信息的缓存名称 -->
     </bean>
 
@@ -72,22 +75,30 @@
 
     <!-- 会话DAO -->
     <bean id="sessionDAO" class="org.apache.shiro.session.mgt.eis.EnterpriseCacheSessionDAO">
+    	<!-- 激活ehcache缓存，还需要设置securityManager 使用ehcache缓存，如如不设置将默认采用MapCache -->
         <property name="activeSessionsCacheName" value="shiro-activeSessionCache"/>
+        <!-- 会话生成器 -->
         <property name="sessionIdGenerator" ref="sessionIdGenerator"/>
     </bean>
 
     <!-- 会话验证调度器 --><!-- org.apache.shiro.session.mgt.quartz.QuartzSessionValidationScheduler -->
     <bean id="sessionValidationScheduler" class="com.shiro.expand.ExpandQuartzSessionValidationScheduler">
         <property name="sessionValidationInterval" value="1800000"/><!-- 设置回话过期时间/毫秒 -->
+       	<!-- 设置会话验证调度器进行会话验证时的会话管理器 -->
         <property name="sessionManager" ref="sessionManager"/>
     </bean>
 
     <!-- 会话管理器 -->
     <bean id="sessionManager" class="org.apache.shiro.web.session.mgt.DefaultWebSessionManager">
+    	<!-- 设置全局会话超时时间 -->
         <property name="globalSessionTimeout" value="1800000"/>
+        <!-- 会话过期自动删除默认true -->
         <property name="deleteInvalidSessions" value="true"/>
+        <!-- 是否开启会话验证器，默认是开启的 -->
         <property name="sessionValidationSchedulerEnabled" value="true"/>
+        <!-- 设 置 会 话 验 证 调 度 器  -->
         <property name="sessionValidationScheduler" ref="sessionValidationScheduler"/>
+        <!-- sessionDao 设置 -->
         <property name="sessionDAO" ref="sessionDAO"/>
         <property name="sessionIdCookieEnabled" value="true"/>
         <property name="sessionIdCookie" ref="sessionIdCookie"/>
@@ -102,11 +113,18 @@
 		<property name="kickoutUrl" value="/login?kickout=1" />
 	</bean>
 
-    <!-- 安全管理器 -->
+    <!-- 
+    	安全管理器
+    	Shiro 内部相应的组件（DefaultSecurityManager）会自动检测相应的对象（如 Realm）是否实现了 CacheManagerAware 并自动注入相应的 CacheManager  
+    -->
     <bean id="securityManager" class="org.apache.shiro.web.mgt.DefaultWebSecurityManager">
+    	<!-- 注入自己的realm -->
         <property name="realm" ref="userRealm"/>
+        <!-- 注入会话管理器 -->
         <property name="sessionManager" ref="sessionManager"/>
+        <!-- 注入cache组件 -->
         <property name="cacheManager" ref="cacheManager"/>
+        <!-- 记住我管理 -->
         <property name="rememberMeManager" ref="rememberMeManager"/>
     </bean>
 
@@ -135,7 +153,9 @@
             <util:map>
                 <entry key="authc" value-ref="formAuthenticationFilter"/>
                 <entry key="sysUser" value-ref="sysUserFilter"/>
+                <!-- 不允许用户重复登陆 -->
                 <entry key="kickout" value-ref="kickoutSessionControlFilter"/>
+                <!-- 强制踢出 -->
                 <entry key="forceLogout" value-ref="forceLogoutFilter"/>
             </util:map>
         </property>
